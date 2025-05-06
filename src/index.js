@@ -14,6 +14,8 @@ const contactRoutes = require('./routes/contact.routes');
 
 // Initialize Express app
 const app = express();
+
+// Ensure PORT is set
 const PORT = process.env.PORT || 3000;
 
 // Middleware
@@ -90,32 +92,38 @@ app.use((err, req, res, next) => {
   });
 });
 
-// Connect to MongoDB
+// Start the server first
+const server = app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
+});
+
+// Then connect to MongoDB
+if (!process.env.MONGODB_URI) {
+  console.error('MONGODB_URI is not defined in environment variables');
+  process.exit(1);
+}
+
 mongoose.connect(process.env.MONGODB_URI)
   .then(() => {
     console.log('Connected to MongoDB');
     
-    // Start the server
-    app.listen(PORT, () => {
-      console.log(`Server running on port ${PORT}`);
-      
-      // Setup and start background jobs
-      setupQueues();
-      
-      // Initialize worker for processing jobs
-      const worker = initializeWorker();
-      
-      // Initialize job scheduler for periodic news updates
-      initializeScheduler()
-        .then(() => console.log('Job scheduler initialized successfully'))
-        .catch(err => console.error('Failed to initialize job scheduler:', err));
-      
-      console.log('Background jobs system initialized');
-    });
+    // Setup and start background jobs
+    setupQueues();
+    
+    // Initialize worker for processing jobs
+    const worker = initializeWorker();
+    
+    // Initialize job scheduler for periodic news updates
+    initializeScheduler()
+      .then(() => console.log('Job scheduler initialized successfully'))
+      .catch(err => console.error('Failed to initialize job scheduler:', err));
+    
+    console.log('Background jobs system initialized');
   })
   .catch(err => {
     console.error('Failed to connect to MongoDB:', err);
-    process.exit(1);
+    // Don't exit the process, just log the error
+    // This allows the server to keep running even if MongoDB is temporarily unavailable
   });
 
 // Handle unhandled promise rejections
