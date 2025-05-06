@@ -18,11 +18,32 @@ const app = express();
 // Ensure PORT is set
 const PORT = process.env.PORT || 3000;
 
+// Configure CORS for multiple domains
+const corsOptions = {
+  origin: [
+    // Local development
+    'http://localhost:3000',
+    'http://localhost:3001',
+    'http://localhost:8000',
+    'http://127.0.0.1:3000',
+    // Production domains
+    'https://flash-patrika.vercel.app',
+    'https://www.flash-patrika.vercel.app',
+    // Add any other domains that need access
+  ],
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
+};
+
 // Middleware
 app.use(helmet()); // Security headers
-app.use(cors()); // Enable CORS
+app.use(cors(corsOptions)); // Enable CORS with options
 app.use(express.json()); // Parse JSON bodies
 app.use(morgan('dev')); // Logging
+
+// Additional OPTIONS handler for preflight requests
+app.options('*', cors(corsOptions));
 
 // Rate limiting
 const limiter = rateLimit({
