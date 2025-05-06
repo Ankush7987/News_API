@@ -1,0 +1,130 @@
+require('dotenv').config();
+const express = require('express');
+const mongoose = require('mongoose');
+const cors = require('cors');
+const helmet = require('helmet');
+const morgan = require('morgan');
+const rateLimit = require('express-rate-limit');
+const { setupQueues } = require('./jobs/queue');
+const { initializeWorker } = require('./jobs/worker');
+const { initializeScheduler } = require('./jobs/jobScheduler');
+const newsRoutes = require('./routes/news.routes');
+const fetchRoutes = require('./routes/fetch.routes');
+const contactRoutes = require('./routes/contact.routes');
+
+// Initialize Express app
+const app = express();
+const PORT = process.env.PORT || 3000;
+
+// Middleware
+app.use(helmet()); // Security headers
+app.use(cors()); // Enable CORS
+app.use(express.json()); // Parse JSON bodies
+app.use(morgan('dev')); // Logging
+
+// Rate limiting
+const limiter = rateLimit({
+  windowMs: 1 * 60 * 1000, // 1 minute window
+  max: 200, // Allow 200 requests per minute per IP
+  message: 'Too many requests, please try again later.',
+  standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
+  legacyHeaders: false // Disable the `X-RateLimit-*` headers
+});
+app.use('/api', limiter);
+
+// Simple in-memory cache for API responses
+const responseCache = new Map();
+const CACHE_TTL = 30 * 1000; // 30 seconds cache TTL
+
+// Cache middleware
+app.use('/api/news', (req, res, next) => {
+  const cacheKey = req.originalUrl || req.url;
+  const cachedResponse = responseCache.get(cacheKey);
+  
+  if (cachedResponse && cachedResponse.expiry > Date.now()) {
+    return res.json(cachedResponse.data);
+  }
+  
+  // Store the original res.json method
+  const originalJson = res.json;
+  
+  // Override res.json method to cache the response
+  res.json = function(data) {
+    // Only cache successful responses
+    if (res.statusCode >= 200 && res.statusCode < 300) {
+      responseCache.set(cacheKey, {
+        data,
+        expiry: Date.now() + CACHE_TTL
+      });
+      
+      // Clean up expired cache entries periodically
+      setTimeout(() => {
+        responseCache.delete(cacheKey);
+      }, CACHE_TTL);
+    }
+    
+    // Call the original method
+    return originalJson.call(this, data);
+  };
+  
+  next();
+});
+
+// Routes
+app.use('/api', newsRoutes);
+app.use('/api', fetchRoutes);
+app.use('/api/contact', contactRoutes);
+
+// Health check endpoint
+app.get('/health', (req, res) => {
+  res.status(200).json({ status: 'ok', message: 'Server is running' });
+});
+
+// Error handling middleware
+app.use((err, req, res, next) => {
+  console.error(err.stack);
+  res.status(500).json({
+    status: 'error',
+    message: 'Something went wrong!',
+    error: process.env.NODE_ENV === 'development' ? err.message : undefined
+  });
+});
+
+// Connect to MongoDB
+mongoose.connect(process.env.MONGODB_URI)
+  .then(() => {
+    console.log('Connected to MongoDB');
+    
+    // Start the server
+    app.listen(PORT, () => {
+      console.log(`Server running on port ${PORT}`);
+      
+      // Setup and start background jobs
+      setupQueues();
+      
+      // Initialize worker for processing jobs
+      const worker = initializeWorker();
+      
+      // Initialize job scheduler for periodic news updates
+      initializeScheduler()
+        .then(() => console.log('Job scheduler initialized successfully'))
+        .catch(err => console.error('Failed to initialize job scheduler:', err));
+      
+      console.log('Background jobs system initialized');
+    });
+  })
+  .catch(err => {
+    console.error('Failed to connect to MongoDB:', err);
+    process.exit(1);
+  });
+
+// Handle unhandled promise rejections
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+});
+
+// Handle uncaught exceptions
+process.on('uncaughtException', (err) => {
+  console.error('Uncaught Exception:', err);
+  process.exit(1);
+});
