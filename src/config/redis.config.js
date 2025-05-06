@@ -7,6 +7,24 @@
 
 const Redis = require('ioredis');
 
+/**
+ * Cleans a Redis URL string by removing URL encoding characters and extra spaces
+ * @param {string} url - The Redis URL to clean
+ * @returns {string} - Cleaned Redis URL
+ */
+const cleanRedisUrl = (url) => {
+  if (!url) return url;
+  
+  // Remove URL-encoded spaces %20 and any extra spaces
+  let cleanedUrl = url.replace(/%20/g, '').trim();
+  
+  // Remove any -u flag if present (common mistake in copying Redis URLs)
+  cleanedUrl = cleanedUrl.replace(/\s*-u\s*/g, '');
+  
+  console.log(`Cleaned Redis URL. Original length: ${url.length}, cleaned length: ${cleanedUrl.length}`);
+  return cleanedUrl;
+};
+
 // Create Redis connection
 const createRedisConnection = () => {
   // Use a flag to determine if we're in local development
@@ -71,25 +89,41 @@ const createRedisConnection = () => {
       // Add other methods that might be used in your code
     };
   } else if (process.env.REDIS_URL) {
-    // For Render deployment
-    const connection = new Redis(process.env.REDIS_URL, {
-      maxRetriesPerRequest: null,
-      enableReadyCheck: true,
-      retryStrategy: (times) => {
-        const delay = Math.min(times * 1000, 10000);
-        return delay;
-      }
-    });
+    // Clean the Redis URL to handle formatting issues
+    const redisUrl = cleanRedisUrl(process.env.REDIS_URL);
+    console.log(`Using Redis URL with length: ${redisUrl.length}`);
     
-    connection.on('connect', () => {
-      console.log('✅ Connected to Redis (Production)');
-    });
+    try {
+      // For Render deployment
+      const connection = new Redis(redisUrl, {
+        maxRetriesPerRequest: null,
+        enableReadyCheck: true,
+        retryStrategy: (times) => {
+          const delay = Math.min(times * 1000, 10000);
+          return delay;
+        }
+      });
+      
+      connection.on('connect', () => {
+        console.log('✅ Connected to Redis (Production)');
+      });
 
-    connection.on('error', (err) => {
-      console.error('❌ Redis connection error:', err);
-    });
+      connection.on('error', (err) => {
+        console.error('❌ Redis connection error:', err);
+      });
 
-    return connection;
+      return connection;
+    } catch (error) {
+      console.error('Failed to create Redis connection:', error);
+      console.log('Falling back to disabled Redis mode');
+      
+      // Return a mock Redis object as a fallback
+      return {
+        on: () => {},
+        disconnect: () => {},
+        // Add other methods that might be used in your code
+      };
+    }
   }
 };
 
