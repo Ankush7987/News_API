@@ -100,7 +100,25 @@ app.use('/api/contact', contactRoutes);
 
 // Health check endpoint
 app.get('/health', (req, res) => {
-  res.status(200).json({ status: 'ok', message: 'Server is running' });
+  const mongoStatus = mongoose.connection.readyState;
+  const mongoStatusText = {
+    0: 'disconnected',
+    1: 'connected',
+    2: 'connecting',
+    3: 'disconnecting',
+    4: 'invalid'
+  }[mongoStatus] || 'unknown';
+
+  res.status(200).json({
+    status: 'ok',
+    message: 'Server is running',
+    mongodb: {
+      status: mongoStatusText,
+      statusCode: mongoStatus
+    },
+    version: process.env.npm_package_version || '1.0.0',
+    timestamp: new Date().toISOString()
+  });
 });
 
 // Error handling middleware
@@ -124,7 +142,60 @@ if (!process.env.MONGODB_URI) {
   process.exit(1);
 }
 
-mongoose.connect(process.env.MONGODB_URI)
+// MongoDB connection options
+const mongooseOptions = {
+  serverSelectionTimeoutMS: 30000, // Timeout for server selection (increased from default)
+  socketTimeoutMS: 45000, // How long the MongoDB driver will wait before timing out operations
+  connectTimeoutMS: 30000, // How long to wait for initial connection
+  maxPoolSize: 10, // Maximum number of sockets the MongoDB driver will keep open for this connection
+  minPoolSize: 1, // Minimum number of sockets the MongoDB driver will keep open for this connection
+  heartbeatFrequencyMS: 10000, // How often to send heartbeats
+  retryWrites: true, // Automatically retry failed writes
+  retryReads: true, // Automatically retry failed reads
+  maxIdleTimeMS: 45000, // How long a connection can remain idle before being closed
+  autoIndex: process.env.NODE_ENV !== 'production', // Don't build indexes in production
+};
+
+// Log connection information (masking sensitive parts of the URI)
+let redactedUri = process.env.MONGODB_URI;
+if (redactedUri) {
+  try {
+    // Try to create a URL object to parse the MongoDB URI
+    const mongoUrl = new URL(redactedUri);
+    // Mask the password if it exists
+    if (mongoUrl.password) {
+      mongoUrl.password = '********';
+      redactedUri = mongoUrl.toString();
+    }
+  } catch (e) {
+    // If we can't parse the URL, just mask part of the string
+    redactedUri = redactedUri.replace(/\/\/[^:]+:([^@]+)@/, '//****:****@');
+  }
+  console.log(`Connecting to MongoDB at: ${redactedUri}`);
+  console.log(`MongoDB connection options:`, JSON.stringify(mongooseOptions, null, 2));
+}
+
+console.log('Connecting to MongoDB...');
+
+// Set up MongoDB connection monitoring
+mongoose.connection.on('connected', () => {
+  console.log('✅ MongoDB connection established successfully');
+});
+
+mongoose.connection.on('error', (err) => {
+  console.error('❌ MongoDB connection error:', err);
+});
+
+mongoose.connection.on('disconnected', () => {
+  console.warn('⚠️ MongoDB connection disconnected');
+});
+
+mongoose.connection.on('reconnected', () => {
+  console.log('✅ MongoDB connection reestablished');
+});
+
+// Connect to MongoDB with options
+mongoose.connect(process.env.MONGODB_URI, mongooseOptions)
   .then(() => {
     console.log('Connected to MongoDB');
     

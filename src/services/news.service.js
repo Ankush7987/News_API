@@ -75,20 +75,42 @@ const getNews = async (category, page = 1, limit = 10) => {
     }
   }
   
-  // Get total count for pagination metadata
-  const totalResults = await News.countDocuments(query);
-  
-  // Get the news items for the current page
-  const results = await News.find(query)
-    .sort({ publishedAt: -1 })
-    .skip(skip)
-    .limit(limit)
-    .lean();
+  try {
+    // Get total count for pagination metadata with timeout
+    const totalPromise = News.countDocuments(query).maxTimeMS(5000).exec();
     
-  return {
-    results,
-    totalResults
-  };
+    // Get the news items for the current page with timeout
+    const resultsPromise = News.find(query)
+      .sort({ publishedAt: -1 })
+      .skip(skip)
+      .limit(limit)
+      .lean()
+      .maxTimeMS(5000)
+      .exec();
+    
+    // Execute both promises in parallel for better performance
+    const [totalResults, results] = await Promise.all([totalPromise, resultsPromise]);
+      
+    return {
+      results,
+      totalResults
+    };
+  } catch (error) {
+    console.error('MongoDB query error in getNews:', error);
+    
+    // If it's a timeout error, return a specific error
+    if (error.name === 'MongooseError' && error.message.includes('timed out')) {
+      throw new Error('Database operation timed out. Please try again later.');
+    }
+    
+    // For server selection errors (connection issues)
+    if (error.name === 'MongooseServerSelectionError') {
+      throw new Error('Unable to connect to database. Please try again later.');
+    }
+    
+    // Rethrow the original error
+    throw error;
+  }
 };
 
 /**
@@ -100,20 +122,42 @@ const getNews = async (category, page = 1, limit = 10) => {
 const getLatestNews = async (page = 1, limit = 10) => {
   const skip = (page - 1) * limit;
   
-  // Get total count for pagination metadata
-  const totalResults = await News.countDocuments({});
-  
-  // Get the news items for the current page
-  const results = await News.find({})
-    .sort({ publishedAt: -1 })
-    .skip(skip)
-    .limit(limit)
-    .lean();
+  try {
+    // Get total count for pagination metadata with timeout
+    const totalPromise = News.countDocuments({}).maxTimeMS(5000).exec();
     
-  return {
-    results,
-    totalResults
-  };
+    // Get the news items for the current page with timeout
+    const resultsPromise = News.find({})
+      .sort({ publishedAt: -1 })
+      .skip(skip)
+      .limit(limit)
+      .lean()
+      .maxTimeMS(5000)
+      .exec();
+    
+    // Execute both promises in parallel for better performance
+    const [totalResults, results] = await Promise.all([totalPromise, resultsPromise]);
+      
+    return {
+      results,
+      totalResults
+    };
+  } catch (error) {
+    console.error('MongoDB query error in getLatestNews:', error);
+    
+    // If it's a timeout error, return a specific error
+    if (error.name === 'MongooseError' && error.message.includes('timed out')) {
+      throw new Error('Database operation timed out. Please try again later.');
+    }
+    
+    // For server selection errors (connection issues)
+    if (error.name === 'MongooseServerSelectionError') {
+      throw new Error('Unable to connect to database. Please try again later.');
+    }
+    
+    // Rethrow the original error
+    throw error;
+  }
 };
 
 /**
