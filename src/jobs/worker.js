@@ -9,6 +9,9 @@ const { Worker } = require('bullmq');
 const { createRedisConnection } = require('../config/redis.config');
 const newsProcessor = require('./newsProcessor');
 
+// Check if Redis is disabled
+const isRedisDisabled = process.env.SKIP_REDIS === 'true';
+
 // Create Redis connection
 const redisConnection = createRedisConnection();
 
@@ -19,6 +22,15 @@ const redisConnection = createRedisConnection();
  * @returns {Worker} - The created worker
  */
 const createNewsWorker = (processor, options = {}) => {
+  if (isRedisDisabled) {
+    console.log('Creating mock worker (Redis disabled)');
+    return {
+      on: () => {},
+      close: async () => {},
+      run: async () => {}
+    };
+  }
+
   if (typeof processor !== 'function') {
     throw new Error('Job processor must be a function');
   }
@@ -94,6 +106,17 @@ const createNewsWorker = (processor, options = {}) => {
  */
 const initializeWorker = () => {
   console.log('Initializing news worker...');
+  
+  if (isRedisDisabled) {
+    console.log('Using mock worker (Redis disabled)');
+    console.log('News worker initialized successfully');
+    return {
+      on: () => {},
+      close: async () => {},
+      run: async () => {}
+    };
+  }
+  
   const worker = createNewsWorker(newsProcessor, {
     concurrency: 1 // Process one job at a time
   });
@@ -107,7 +130,7 @@ const initializeWorker = () => {
  * @returns {Promise<void>}
  */
 const shutdownWorker = async (worker) => {
-  if (worker) {
+  if (worker && !isRedisDisabled) {
     console.log('Shutting down worker...');
     await worker.close();
     console.log('Worker shut down successfully');

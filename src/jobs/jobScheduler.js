@@ -8,14 +8,24 @@
 const { Queue } = require('bullmq');
 const { createRedisConnection, queueOptions } = require('../config/redis.config');
 
+// Check if Redis is disabled
+const isRedisDisabled = process.env.SKIP_REDIS === 'true';
+
 // Create Redis connection
 const redisConnection = createRedisConnection();
 
 // Queue for news processing
-const newsQueue = new Queue('news', {
-  connection: redisConnection,
-  ...queueOptions
-});
+const newsQueue = isRedisDisabled
+  ? {
+      add: async () => ({ id: 'mock-job-' + Date.now() }),
+      getRepeatableJobs: async () => [],
+      removeRepeatableByKey: async () => {},
+      close: async () => {}
+    }
+  : new Queue('news', {
+      connection: redisConnection,
+      ...queueOptions
+    });
 
 /**
  * Add a news update job to the queue
@@ -23,6 +33,11 @@ const newsQueue = new Queue('news', {
  * @returns {Promise<Object>} - The created job
  */
 const addNewsUpdateJob = async (options = {}) => {
+  if (isRedisDisabled) {
+    console.log('[MOCK] Adding news update job to queue (Redis disabled)');
+    return { id: 'mock-job-' + Date.now() };
+  }
+
   console.log('Adding news update job to queue');
   
   const jobOptions = {
@@ -45,6 +60,11 @@ const addNewsUpdateJob = async (options = {}) => {
  * @returns {Promise<Object>} - The created repeatable job
  */
 const scheduleNewsUpdate = async (intervalMinutes = 10) => {
+  if (isRedisDisabled) {
+    console.log(`[MOCK] Scheduling news update job to run every ${intervalMinutes} minutes (Redis disabled)`);
+    return { id: 'mock-repeatable-job-' + Date.now() };
+  }
+
   console.log(`Scheduling news update job to run every ${intervalMinutes} minutes`);
   
   // Remove any existing repeatable jobs with the same name
@@ -96,6 +116,11 @@ const initializeScheduler = async () => {
  * @returns {Promise<void>}
  */
 const shutdownScheduler = async () => {
+  if (isRedisDisabled) {
+    console.log('[MOCK] Shutting down job scheduler (Redis disabled)');
+    return;
+  }
+
   try {
     console.log('Shutting down job scheduler...');
     await newsQueue.close();

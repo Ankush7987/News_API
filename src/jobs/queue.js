@@ -8,32 +8,57 @@
 const { Queue, QueueEvents } = require('bullmq');
 const { createRedisConnection, queueOptions } = require('../config/redis.config');
 
-// Create Redis connection
+// Check if Redis is disabled
+const isRedisDisabled = process.env.SKIP_REDIS === 'true';
+
+// Create mock objects for when Redis is disabled
+const createMockQueue = () => {
+  return {
+    add: async () => ({ id: 'mock-job-' + Date.now() }),
+    close: async () => {},
+    on: () => {}
+  };
+};
+
+const createMockQueueEvents = () => {
+  return {
+    on: () => {},
+    close: async () => {}
+  };
+};
+
+// Create Redis connection or mock
 const redisConnection = createRedisConnection();
 
-// Queue for news processing
-const newsQueue = new Queue('news', {
-  connection: redisConnection,
-  ...queueOptions
-});
+// Queue for news processing - real or mock
+const newsQueue = isRedisDisabled 
+  ? createMockQueue()
+  : new Queue('news', {
+      connection: redisConnection,
+      ...queueOptions
+    });
 
-// Queue events for monitoring
-const queueEvents = new QueueEvents('news', {
-  connection: redisConnection
-});
+// Queue events for monitoring - real or mock
+const queueEvents = isRedisDisabled
+  ? createMockQueueEvents()
+  : new QueueEvents('news', {
+      connection: redisConnection
+    });
 
-// Set up queue event listeners
-queueEvents.on('completed', ({ jobId }) => {
-  console.log(`Job ${jobId} has been completed successfully`);
-});
-
-queueEvents.on('failed', ({ jobId, failedReason }) => {
-  console.error(`Job ${jobId} has failed with reason: ${failedReason}`);
-});
-
-queueEvents.on('stalled', ({ jobId }) => {
-  console.warn(`Job ${jobId} has been stalled - will be automatically retried`);
-});
+// Set up queue event listeners (if not using mocks)
+if (!isRedisDisabled) {
+  queueEvents.on('completed', ({ jobId }) => {
+    console.log(`Job ${jobId} has been completed successfully`);
+  });
+  
+  queueEvents.on('failed', ({ jobId, failedReason }) => {
+    console.error(`Job ${jobId} has failed with reason: ${failedReason}`);
+  });
+  
+  queueEvents.on('stalled', ({ jobId }) => {
+    console.warn(`Job ${jobId} has been stalled - will be automatically retried`);
+  });
+}
 
 /**
  * Add a job to the news queue
@@ -43,6 +68,11 @@ queueEvents.on('stalled', ({ jobId }) => {
  * @returns {Promise<Object>} - The created job
  */
 const addJob = async (name, data = {}, options = {}) => {
+  if (isRedisDisabled) {
+    console.log(`[MOCK] Would have added job '${name}' (Redis disabled)`);
+    return { id: 'mock-job-' + Date.now() };
+  }
+
   const jobOptions = {
     removeOnComplete: true,
     removeOnFail: true, // Remove failed jobs to prevent queue buildup
@@ -61,6 +91,11 @@ const addJob = async (name, data = {}, options = {}) => {
  * Setup queues and event listeners
  */
 const setupQueues = () => {
+  if (isRedisDisabled) {
+    console.log('News queue initialized (MOCK - Redis disabled)');
+    return;
+  }
+
   console.log('News queue initialized');
   
   // Handle process termination gracefully
