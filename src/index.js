@@ -160,6 +160,12 @@ const mongooseOptions = {
 if (process.env.MONGODB_URI && !process.env.MONGODB_URI.includes('localhost') && !process.env.MONGODB_URI.includes('127.0.0.1')) {
   mongooseOptions.ssl = true;
   mongooseOptions.tls = true;
+  // Add explicit TLS version and certificate validation settings for Render deployment
+  mongooseOptions.tlsInsecure = false; // Ensure proper certificate validation
+  mongooseOptions.tlsAllowInvalidCertificates = false;
+  mongooseOptions.tlsAllowInvalidHostnames = false;
+  mongooseOptions.minTlsVersion = 'TLSv1.2'; // Enforce minimum TLS version
+  mongooseOptions.maxTlsVersion = 'TLSv1.3'; // Support latest TLS version
 }
 
 // Log connection information (masking sensitive parts of the URI)
