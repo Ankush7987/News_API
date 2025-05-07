@@ -144,17 +144,23 @@ if (!process.env.MONGODB_URI) {
 
 // MongoDB connection options
 const mongooseOptions = {
-  serverSelectionTimeoutMS: 30000, // Timeout for server selection (increased from default)
-  socketTimeoutMS: 45000, // How long the MongoDB driver will wait before timing out operations
-  connectTimeoutMS: 30000, // How long to wait for initial connection
-  maxPoolSize: 10, // Maximum number of sockets the MongoDB driver will keep open for this connection
-  minPoolSize: 1, // Minimum number of sockets the MongoDB driver will keep open for this connection
-  heartbeatFrequencyMS: 10000, // How often to send heartbeats
-  retryWrites: true, // Automatically retry failed writes
-  retryReads: true, // Automatically retry failed reads
-  maxIdleTimeMS: 45000, // How long a connection can remain idle before being closed
-  autoIndex: process.env.NODE_ENV !== 'production', // Don't build indexes in production
+  serverSelectionTimeoutMS: 30000,
+  socketTimeoutMS: 45000,
+  connectTimeoutMS: 30000,
+  maxPoolSize: 10,
+  minPoolSize: 1,
+  heartbeatFrequencyMS: 10000,
+  retryWrites: true,
+  retryReads: true,
+  maxIdleTimeMS: 45000,
+  autoIndex: process.env.NODE_ENV !== 'production'
 };
+
+// Only use SSL/TLS for Atlas or remote connections, not for localhost
+if (process.env.MONGODB_URI && !process.env.MONGODB_URI.includes('localhost') && !process.env.MONGODB_URI.includes('127.0.0.1')) {
+  mongooseOptions.ssl = true;
+  mongooseOptions.tls = true;
+}
 
 // Log connection information (masking sensitive parts of the URI)
 let redactedUri = process.env.MONGODB_URI;
@@ -199,18 +205,26 @@ mongoose.connect(process.env.MONGODB_URI, mongooseOptions)
   .then(() => {
     console.log('Connected to MongoDB');
     
-    // Setup and start background jobs
-    setupQueues();
-    
-    // Initialize worker for processing jobs
-    const worker = initializeWorker();
-    
-    // Initialize job scheduler for periodic news updates
-    initializeScheduler()
-      .then(() => console.log('Job scheduler initialized successfully'))
-      .catch(err => console.error('Failed to initialize job scheduler:', err));
-    
-    console.log('Background jobs system initialized');
+    try {
+      // Setup and start background jobs
+      setupQueues();
+      
+      // Initialize worker for processing jobs
+      const worker = initializeWorker();
+      
+      // Initialize job scheduler for periodic news updates
+      initializeScheduler()
+        .then(() => console.log('Job scheduler initialized successfully'))
+        .catch(err => {
+          console.error('Failed to initialize job scheduler:', err);
+          console.log('Continuing without job scheduler...');
+        });
+      
+      console.log('Background jobs system initialized');
+    } catch (error) {
+      console.error('Error initializing background jobs system:', error);
+      console.log('Continuing without background jobs system...');
+    }
   })
   .catch(err => {
     console.error('Failed to connect to MongoDB:', err);

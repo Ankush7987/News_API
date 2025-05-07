@@ -68,7 +68,9 @@ const createRedisConnection = () => {
       retryStrategy: (times) => {
         const delay = Math.min(times * 1000, 10000);
         return delay;
-      }
+      },
+      maxmemory: '2gb',
+      maxmemoryPolicy: 'noeviction'
     });
 
     connection.on('connect', () => {
@@ -101,7 +103,9 @@ const createRedisConnection = () => {
         retryStrategy: (times) => {
           const delay = Math.min(times * 1000, 10000);
           return delay;
-        }
+        },
+        maxmemory: '2gb',
+        maxmemoryPolicy: 'noeviction'
       });
       
       connection.on('connect', () => {
