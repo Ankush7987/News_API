@@ -31,7 +31,7 @@ npm install
 
 ```
 # MongoDB Connection String
-MONGODB_URI=mongodb://localhost:27017/newsflow
+MONGODB_URI=mongodb+srv://NewsApiUser:9753384721API@newsapi.zbke8xj.mongodb.net/?retryWrites=true&w=majority&appName=NewsAPI
 
 # Server Port
 PORT=3000

@@ -49,7 +49,7 @@ A clean, fast, and real-time News API built with Node.js that fetches news from 
 3. Create a `.env` file in the root directory with the following variables:
    ```
    PORT=3000
-   MONGODB_URI=mongodb://localhost:27017/news-api
+   MONGODB_URI=mongodb+srv://NewsApiUser:9753384721API@newsapi.zbke8xj.mongodb.net/?retryWrites=true&w=majority&appName=NewsAPI
    REDIS_URL=redis://localhost:6379
    ADMIN_TOKEN=your_admin_token_here
    ```
