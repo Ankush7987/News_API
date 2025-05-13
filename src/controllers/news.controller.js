@@ -8,6 +8,7 @@
  */
 
 const newsService = require('../services/news.service');
+const { getCache, setCache, DEFAULT_CACHE_EXPIRATION } = require('../utils/cache.util');
 
 // Simple in-memory cache to serve as fallback when database is unavailable
 const fallbackCache = new Map();
@@ -35,11 +36,31 @@ const getNews = async (req, res) => {
     // Debug log for category filtering
     console.log(`Filtering news by categories: ${JSON.stringify(categories)}`);
     
+    // Try to get data from Redis cache first
+    const cachedData = await getCache(cacheKey);
+    if (cachedData) {
+      console.log(`Serving cached news data for key: ${cacheKey}`);
+      const { results, totalResults } = cachedData;
+      const totalPages = Math.ceil(totalResults / limit);
+      
+      return res.status(200).json({
+        status: 'success',
+        currentPage: page,
+        totalPages,
+        totalResults,
+        results,
+        source: 'cache'
+      });
+    }
+    
     try {
-      // Try to get data from the database
+      // If not in cache, get data from the database
       const { results, totalResults } = await newsService.getNews(categories, page, limit);
       
-      // If successful, update the fallback cache
+      // Cache the results in Redis
+      await setCache(cacheKey, { results, totalResults });
+      
+      // Also update the fallback cache
       fallbackCache.set(cacheKey, {
         data: { results, totalResults },
         expiry: Date.now() + FALLBACK_CACHE_TTL
@@ -107,11 +128,31 @@ const getLatestNews = async (req, res) => {
     // Create a cache key for this request
     const cacheKey = `latest-${page}-${limit}`;
     
+    // Try to get data from Redis cache first
+    const cachedData = await getCache(cacheKey);
+    if (cachedData) {
+      console.log(`Serving cached latest news data for key: ${cacheKey}`);
+      const { results, totalResults } = cachedData;
+      const totalPages = Math.ceil(totalResults / limit);
+      
+      return res.status(200).json({
+        status: 'success',
+        currentPage: page,
+        totalPages,
+        totalResults,
+        results,
+        source: 'cache'
+      });
+    }
+    
     try {
-      // Try to get data from the database
+      // If not in cache, get data from the database
       const { results, totalResults } = await newsService.getLatestNews(page, limit);
       
-      // If successful, update the fallback cache
+      // Cache the results in Redis
+      await setCache(cacheKey, { results, totalResults });
+      
+      // Also update the fallback cache
       fallbackCache.set(cacheKey, {
         data: { results, totalResults },
         expiry: Date.now() + FALLBACK_CACHE_TTL

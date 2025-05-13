@@ -8,9 +8,14 @@ const rateLimit = require('express-rate-limit');
 const { setupQueues } = require('./jobs/queue');
 const { initializeWorker } = require('./jobs/worker');
 const { initializeScheduler } = require('./jobs/jobScheduler');
+const { createRedisConnection } = require('./config/redis.config');
 const newsRoutes = require('./routes/news.routes');
 const fetchRoutes = require('./routes/fetch.routes');
 const contactRoutes = require('./routes/contact.routes');
+
+// Initialize Redis connection
+const redisClient = createRedisConnection();
+console.log('Redis client initialized for caching');
 
 // Initialize Express app
 const app = express();
@@ -55,43 +60,8 @@ const limiter = rateLimit({
 });
 app.use('/api', limiter);
 
-// Simple in-memory cache for API responses
-const responseCache = new Map();
-const CACHE_TTL = 30 * 1000; // 30 seconds cache TTL
-
-// Cache middleware
-app.use('/api/news', (req, res, next) => {
-  const cacheKey = req.originalUrl || req.url;
-  const cachedResponse = responseCache.get(cacheKey);
-  
-  if (cachedResponse && cachedResponse.expiry > Date.now()) {
-    return res.json(cachedResponse.data);
-  }
-  
-  // Store the original res.json method
-  const originalJson = res.json;
-  
-  // Override res.json method to cache the response
-  res.json = function(data) {
-    // Only cache successful responses
-    if (res.statusCode >= 200 && res.statusCode < 300) {
-      responseCache.set(cacheKey, {
-        data,
-        expiry: Date.now() + CACHE_TTL
-      });
-      
-      // Clean up expired cache entries periodically
-      setTimeout(() => {
-        responseCache.delete(cacheKey);
-      }, CACHE_TTL);
-    }
-    
-    // Call the original method
-    return originalJson.call(this, data);
-  };
-  
-  next();
-});
+// Note: We've replaced the simple in-memory cache with Redis caching
+// The Redis cache is now handled directly in the controllers with a 5-minute TTL
 
 // Routes
 app.use('/api', newsRoutes);

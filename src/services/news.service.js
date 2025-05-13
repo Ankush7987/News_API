@@ -9,6 +9,7 @@
 
 const News = require('../models/news.model');
 const { addNewsUpdateJob } = require('../jobs/queue');
+const { clearCachePattern } = require('../utils/cache.util');
 
 /**
  * Normalize category name to match the enum in the news model
@@ -167,6 +168,12 @@ const getLatestNews = async (page = 1, limit = 10) => {
 const triggerNewsUpdate = async () => {
   // Add a job to the queue to update news
   await addNewsUpdateJob();
+  
+  // Clear all news-related caches to ensure fresh data
+  await clearCachePattern('news-*');
+  await clearCachePattern('latest-*');
+  
+  console.log('Cleared news cache after triggering update');
 };
 
 module.exports = {

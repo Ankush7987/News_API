@@ -90,13 +90,13 @@ const createRedisConnection = () => {
       disconnect: () => {},
       // Add other methods that might be used in your code
     };
-  } else if (process.env.REDIS_URL) {
-    // Clean the Redis URL to handle formatting issues
-    const redisUrl = cleanRedisUrl(process.env.REDIS_URL);
+  } else if (process.env.REDIS_URL || process.env.UPSTASH_REDIS_URL) {
+    // Use REDIS_URL if available, fall back to UPSTASH_REDIS_URL for backward compatibility
+    const redisUrl = cleanRedisUrl(process.env.REDIS_URL || process.env.UPSTASH_REDIS_URL);
     console.log(`Using Redis URL with length: ${redisUrl.length}`);
     
     try {
-      // For Render deployment
+      // For production deployment
       const connection = new Redis(redisUrl, {
         maxRetriesPerRequest: null,
         enableReadyCheck: true,
@@ -106,6 +106,11 @@ const createRedisConnection = () => {
         },
         maxmemory: '2gb',
         maxmemoryPolicy: 'noeviction'
+      });
+      
+      // Set Redis to use LRU eviction policy for caching
+      connection.config('SET', 'maxmemory-policy', 'allkeys-lru').catch(err => {
+        console.warn('Could not set Redis eviction policy:', err.message);
       });
       
       connection.on('connect', () => {

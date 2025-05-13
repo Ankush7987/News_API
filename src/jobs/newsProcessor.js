@@ -11,6 +11,7 @@ const axios = require('axios');
 const cheerio = require('cheerio');
 const News = require('../models/news.model');
 const feedSources = require('../feeds/feed-sources');
+const { clearCachePattern } = require('../utils/cache.util');
 
 // Initialize RSS parser with custom fields for media content
 const parser = new Parser({
@@ -399,6 +400,18 @@ const processAllFeeds = async () => {
   console.log('Category distribution:');
   for (const [category, count] of Object.entries(results.categoryCounts)) {
     console.log(`- ${category}: ${count} articles`);
+  }
+  
+  // Clear Redis cache after processing feeds
+  if (results.newItems > 0) {
+    try {
+      // Clear all news-related caches
+      await clearCachePattern('news-*');
+      await clearCachePattern('latest-*');
+      console.log('Redis cache cleared successfully after news update');
+    } catch (error) {
+      console.error('Error clearing Redis cache:', error);
+    }
   }
   
   return results;
